@@ -50,13 +50,13 @@ export function useUserSettings() {
         .from('user_settings')
         .select('settings_json')
         .eq('user_id', uid)
-        .single();
+        .single<{ settings_json: UserSettings }>();
 
       if (error && error.code !== 'PGRST116') { // PGRST116 = no rows returned
         console.error('Error loading settings:', error);
         setSettings(getInitialSettings());
       } else if (data) {
-        setSettings(data.settings_json as UserSettings);
+        setSettings(data.settings_json);
       } else {
         // No settings found, create initial settings
         const initialSettings = getInitialSettings();
