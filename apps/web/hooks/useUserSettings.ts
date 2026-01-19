@@ -11,39 +11,27 @@ export function useUserSettings() {
   const [userId, setUserId] = useState<string | null>(null);
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Load user and settings
-  useEffect(() => {
-    const loadUser = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      setUserId(user?.id || null);
-      
-      if (user) {
-        await loadSettings(user.id);
-      } else {
-        setLoading(false);
+  const saveSettingsToDB = useCallback(async (uid: string, settingsToSave: UserSettings) => {
+    try {
+      const { error } = await supabase
+        .from('user_settings')
+        .upsert({
+          user_id: uid,
+          settings_json: settingsToSave,
+          updated_at: new Date().toISOString()
+        }, {
+          onConflict: 'user_id'
+        });
+
+      if (error) {
+        console.error('Error saving settings:', error);
       }
-    };
-
-    loadUser();
-
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (session?.user) {
-        setUserId(session.user.id);
-        await loadSettings(session.user.id);
-      } else {
-        setUserId(null);
-        setSettings(null);
-        setLoading(false);
-      }
-    });
-
-    return () => {
-      subscription.unsubscribe();
-    };
+    } catch (error) {
+      console.error('Error saving settings:', error);
+    }
   }, []);
 
-  const loadSettings = async (uid: string) => {
+  const loadSettings = useCallback(async (uid: string) => {
     try {
       setLoading(true);
       const { data, error } = await supabase
@@ -69,27 +57,64 @@ export function useUserSettings() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [saveSettingsToDB]);
 
-  const saveSettingsToDB = async (uid: string, settingsToSave: UserSettings) => {
-    try {
-      const { error } = await supabase
-        .from('user_settings')
-        .upsert({
-          user_id: uid,
-          settings_json: settingsToSave,
-          updated_at: new Date().toISOString()
-        }, {
-          onConflict: 'user_id'
-        });
-
-      if (error) {
-        console.error('Error saving settings:', error);
+  // Load user and settings
+  useEffect(() => {
+    const loadUserAndSettings = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      const currentUserId = user?.id || null;
+      setUserId(currentUserId);
+      
+      if (user) {
+        await loadSettings(user.id);
+      } else {
+        setLoading(false);
       }
-    } catch (error) {
-      console.error('Error saving settings:', error);
-    }
-  };
+    };
+
+    // 초기 로드
+    loadUserAndSettings();
+
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (session?.user) {
+        setUserId(session.user.id);
+        await loadSettings(session.user.id);
+      } else {
+        setUserId(null);
+        setSettings(null);
+        setLoading(false);
+      }
+    });
+
+    // 페이지 포커스 시 데이터 다시 로드 (재접속 시 자동 로딩)
+    const handleFocus = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user?.id) {
+        await loadSettings(user.id);
+      }
+    };
+
+    // 페이지 가시성 변경 시 확인
+    const handleVisibilityChange = async () => {
+      if (!document.hidden) {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user?.id) {
+          await loadSettings(user.id);
+        }
+      }
+    };
+
+    window.addEventListener('focus', handleFocus);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      subscription.unsubscribe();
+      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [loadSettings]);
 
   const updateSettings = useCallback((newSettings: UserSettings | ((prev: UserSettings) => UserSettings)) => {
     setSettings((prev) => {

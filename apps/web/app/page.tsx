@@ -9,25 +9,47 @@ export default function HomePage() {
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
+  const checkUser = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      setUser(user);
+    } catch (error) {
+      console.error('Error checking user:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    const checkUser = async () => {
-      try {
-        const { data: { user } } = await supabase.auth.getUser();
-        setUser(user);
-      } catch (error) {
-        console.error('Error checking user:', error);
-      } finally {
-        setLoading(false);
+    // 초기 인증 상태 확인
+    checkUser();
+
+    // 인증 상태 변경 리스너
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+      setLoading(false);
+    });
+
+    // 페이지 포커스 시 인증 상태 다시 확인 (재접속 시 자동 로딩)
+    const handleFocus = () => {
+      checkUser();
+    };
+
+    // 페이지 가시성 변경 시 확인 (탭 전환 등)
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        checkUser();
       }
     };
 
-    checkUser();
+    window.addEventListener('focus', handleFocus);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null);
-    });
-
-    return () => subscription.unsubscribe();
+    return () => {
+      subscription.unsubscribe();
+      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   }, []);
 
   if (loading) {
