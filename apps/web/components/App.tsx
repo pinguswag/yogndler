@@ -39,7 +39,26 @@ import { supabase } from '@/lib/supabase/client';
 
 const App: React.FC = () => {
   const { settings, setSettings, loading } = useUserSettings();
-  const [activeTab, setActiveTab] = useState<'workout' | 'history' | 'settings'>('workout');
+  
+  // localStorage에서 마지막 탭 복원
+  const [activeTab, setActiveTab] = useState<'workout' | 'history' | 'settings'>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('wendler_last_tab');
+      if (saved && ['workout', 'history', 'settings'].includes(saved)) {
+        return saved as 'workout' | 'history' | 'settings';
+      }
+    }
+    return 'workout';
+  });
+  
+  // 탭 변경 시 localStorage에 저장
+  const handleTabChange = (tab: 'workout' | 'history' | 'settings') => {
+    setActiveTab(tab);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('wendler_last_tab', tab);
+    }
+  };
+  
   const [activeWeek, setActiveWeek] = useState<WeekType>(1);
   const [activeLift, setActiveLift] = useState<LiftType>(LiftType.SQUAT);
   const [showAddAccessory, setShowAddAccessory] = useState(false);
@@ -610,7 +629,7 @@ const App: React.FC = () => {
       <nav className="fixed bottom-0 left-0 right-0 z-[70] px-6 pb-12 pt-4 max-w-md mx-auto pointer-events-none">
         <div className="bg-slate-900/95 backdrop-blur-3xl rounded-[40px] p-2.5 flex justify-between items-center shadow-[0_20px_50px_rgba(0,0,0,0.3)] pointer-events-auto border border-white/10 ring-1 ring-white/5">
           <button 
-            onClick={() => setActiveTab('workout')} 
+            onClick={() => handleTabChange('workout')} 
             className={`flex-1 flex flex-col items-center gap-2 py-3.5 transition-all rounded-[32px] ${activeTab === 'workout' ? 'bg-white/10 text-white scale-[1.05]' : 'text-slate-500 opacity-60'}`}
           >
             <Calendar className={`w-5 h-5 ${activeTab === 'workout' ? 'text-blue-500' : ''}`} />
@@ -618,7 +637,7 @@ const App: React.FC = () => {
           </button>
           
           <button 
-            onClick={() => setActiveTab('history')} 
+            onClick={() => handleTabChange('history')} 
             className={`flex-1 flex flex-col items-center gap-2 py-3.5 transition-all rounded-[32px] ${activeTab === 'history' ? 'bg-white/10 text-white scale-[1.05]' : 'text-slate-500 opacity-60'}`}
           >
             <HistoryIcon className={`w-5 h-5 ${activeTab === 'history' ? 'text-blue-500' : ''}`} />
@@ -626,7 +645,7 @@ const App: React.FC = () => {
           </button>
           
           <button 
-            onClick={() => setActiveTab('settings')} 
+            onClick={() => handleTabChange('settings')} 
             className={`flex-1 flex flex-col items-center gap-2 py-3.5 transition-all rounded-[32px] ${activeTab === 'settings' ? 'bg-white/10 text-white scale-[1.05]' : 'text-slate-500 opacity-60'}`}
           >
             <Settings className={`w-5 h-5 ${activeTab === 'settings' ? 'text-blue-500' : ''}`} />
