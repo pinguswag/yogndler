@@ -4,7 +4,8 @@ export const LIFT_LABELS: Record<LiftType, string> = {
   [LiftType.SQUAT]: '스쿼트',
   [LiftType.OHP]: '오버헤드 프레스',
   [LiftType.DEADLIFT]: '데드리프트',
-  [LiftType.BENCH]: '벤치프레스'
+  [LiftType.BENCH]: '벤치프레스',
+  [LiftType.WEAKNESS]: '약점 보완'
 };
 
 // Simplified logic for week templates based on the CSV

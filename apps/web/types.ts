@@ -2,10 +2,11 @@ export enum LiftType {
   SQUAT = 'SQUAT',
   OHP = 'OHP',
   DEADLIFT = 'DEADLIFT',
-  BENCH = 'BENCH'
+  BENCH = 'BENCH',
+  WEAKNESS = 'WEAKNESS'
 }
 
-export type OneRMData = Record<LiftType, number>;
+export type OneRMData = Record<Exclude<LiftType, LiftType.WEAKNESS>, number>;
 
 export interface SetInfo {
   id: string;

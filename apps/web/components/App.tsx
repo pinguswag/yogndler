@@ -112,12 +112,13 @@ const App: React.FC = () => {
         [LiftType.OHP]: 0,
         [LiftType.DEADLIFT]: 0,
         [LiftType.BENCH]: 0,
+        [LiftType.WEAKNESS]: 0,
       };
     }
     const cycle = settings.currentCycle;
     const isPostW3 = activeWeek >= 4;
 
-    const calculateCurrentTM = (type: LiftType) => {
+    const calculateCurrentTM = (type: Exclude<LiftType, LiftType.WEAKNESS>) => {
       const base = calculateTM(settings.oneRM[type], settings.tmPercentage);
       switch (type) {
         case LiftType.BENCH:
@@ -137,6 +138,7 @@ const App: React.FC = () => {
       [LiftType.OHP]: calculateCurrentTM(LiftType.OHP),
       [LiftType.DEADLIFT]: calculateCurrentTM(LiftType.DEADLIFT),
       [LiftType.BENCH]: calculateCurrentTM(LiftType.BENCH),
+      [LiftType.WEAKNESS]: 0, // 약점 보완은 TM 없음
     };
   }, [settings?.oneRM, settings?.tmPercentage, settings?.currentCycle, activeWeek]);
 
@@ -229,20 +231,28 @@ const App: React.FC = () => {
   };
 
   const logWorkout = () => {
-    const sets = getSetsForWeek(activeWeek);
-    const mainSetsResults = sets.map(s => {
-      const key = `${settings.currentCycle}-${activeWeek}-${activeLift}-${s.id}`;
-      return {
-        label: s.label,
-        weight: calculateWeight(currentTMs[activeLift], s.percentage),
-        reps: settings.prRecords[key] || s.reps,
-        completed: !!settings.completedSets[key]
-      };
-    });
+    // 약점 보완일 때는 메인 세트 없음
+    let mainSetsResults: { weight: number; reps: number | string; label: string; completed: boolean }[] = [];
+    
+    if (activeLift !== LiftType.WEAKNESS) {
+      const sets = getSetsForWeek(activeWeek);
+      mainSetsResults = sets.map(s => {
+        const key = `${settings.currentCycle}-${activeWeek}-${activeLift}-${s.id}`;
+        return {
+          label: s.label,
+          weight: calculateWeight(currentTMs[activeLift], s.percentage),
+          reps: settings.prRecords[key] || s.reps,
+          completed: !!settings.completedSets[key]
+        };
+      });
+    }
 
-    const dayAccs = settings.accessories
-      .filter(acc => acc.targetLifts.includes(activeLift))
-      .map(a => ({ name: a.name, weight: a.weight, sets: a.sets, reps: a.reps }));
+    // 약점 보완일 때는 모든 악세사리, 아니면 해당 리프트의 악세사리만
+    const dayAccs = activeLift === LiftType.WEAKNESS
+      ? settings.accessories.map(a => ({ name: a.name, weight: a.weight, sets: a.sets, reps: a.reps }))
+      : settings.accessories
+          .filter(acc => acc.targetLifts.includes(activeLift))
+          .map(a => ({ name: a.name, weight: a.weight, sets: a.sets, reps: a.reps }));
 
     const historyEntry: WorkoutHistory = {
       id: `hist-${Date.now()}`,
@@ -263,7 +273,10 @@ const App: React.FC = () => {
 
   const renderWorkout = () => {
     const sets = getSetsForWeek(activeWeek);
-    const dayAccessories = settings.accessories.filter(acc => acc.targetLifts.includes(activeLift));
+    // 약점 보완일 때는 모든 악세사리 표시, 아니면 해당 리프트의 악세사리만
+    const dayAccessories = activeLift === LiftType.WEAKNESS
+      ? settings.accessories
+      : settings.accessories.filter(acc => acc.targetLifts.includes(activeLift));
 
     return (
       <div className="space-y-6 pb-48 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -327,66 +340,81 @@ const App: React.FC = () => {
           ))}
         </div>
 
-        {/* Main Exercise Card */}
-        <div className="bg-white rounded-[32px] shadow-sm border border-slate-100 overflow-hidden">
-          <div className="bg-slate-50/50 p-5 border-b border-slate-100 flex justify-between items-center">
-            <h3 className="font-black text-slate-800 flex items-center gap-2 text-xs uppercase tracking-widest">
-              <Dumbbell className="w-4 h-4 text-blue-600" />
-              Main Focus
-            </h3>
-            <div className="bg-white px-3 py-1.5 rounded-xl border border-slate-100 flex items-center gap-3">
-               <span className="text-[9px] font-black text-slate-400 uppercase leading-none">Training Max</span>
-               <span className="text-sm font-black text-blue-600">{currentTMs[activeLift].toFixed(1)}kg</span>
+        {/* Main Exercise Card - 약점 보완일 때는 표시하지 않음 */}
+        {activeLift !== LiftType.WEAKNESS && (
+          <div className="bg-white rounded-[32px] shadow-sm border border-slate-100 overflow-hidden">
+            <div className="bg-slate-50/50 p-5 border-b border-slate-100 flex justify-between items-center">
+              <h3 className="font-black text-slate-800 flex items-center gap-2 text-xs uppercase tracking-widest">
+                <Dumbbell className="w-4 h-4 text-blue-600" />
+                Main Focus
+              </h3>
+              <div className="bg-white px-3 py-1.5 rounded-xl border border-slate-100 flex items-center gap-3">
+                 <span className="text-[9px] font-black text-slate-400 uppercase leading-none">Training Max</span>
+                 <span className="text-sm font-black text-blue-600">{currentTMs[activeLift].toFixed(1)}kg</span>
+              </div>
+            </div>
+            
+            <div className="divide-y divide-slate-50">
+              {sets.map(set => {
+                const weight = calculateWeight(currentTMs[activeLift], set.percentage);
+                const key = `${settings.currentCycle}-${activeWeek}-${activeLift}-${set.id}`;
+                const isDone = settings.completedSets[key];
+                
+                return (
+                  <div 
+                    key={set.id} 
+                    className={`p-5 flex items-center justify-between transition-all ${isDone ? 'bg-slate-50/30' : 'bg-white'}`}
+                  >
+                    <div className="flex items-center gap-4">
+                      <button onClick={() => toggleSet(set.id)} className="focus:outline-none scale-110 active:scale-90 transition-transform">
+                        {isDone ? (
+                          <CheckCircle2 className="w-9 h-9 text-green-500 fill-green-50" />
+                        ) : (
+                          <Circle className="w-9 h-9 text-slate-100" />
+                        )}
+                      </button>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className={`text-xl font-black tracking-tight ${isDone ? 'text-slate-200 line-through' : 'text-slate-800'}`}>
+                            {weight}kg
+                          </span>
+                          {set.isPR && <span className="bg-rose-500 text-white text-[9px] px-2 py-0.5 rounded-lg font-black uppercase shadow-sm shadow-rose-200">PR</span>}
+                        </div>
+                        <p className="text-[10px] font-black text-slate-400 uppercase">{set.label} · {set.reps} Reps</p>
+                      </div>
+                    </div>
+
+                    {set.isPR && (
+                      <div className="flex items-center bg-slate-50 p-1.5 rounded-xl border border-slate-100">
+                        <input 
+                          type="number"
+                          placeholder="0"
+                          className="w-10 h-8 bg-transparent text-center text-sm font-black focus:outline-none"
+                          value={settings.prRecords[key] || ''}
+                          onChange={(e) => updatePR(set.id, parseInt(e.target.value) || 0)}
+                        />
+                        <span className="text-[10px] font-black text-slate-400 pr-2">회</span>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </div>
-          
-          <div className="divide-y divide-slate-50">
-            {sets.map(set => {
-              const weight = calculateWeight(currentTMs[activeLift], set.percentage);
-              const key = `${settings.currentCycle}-${activeWeek}-${activeLift}-${set.id}`;
-              const isDone = settings.completedSets[key];
-              
-              return (
-                <div 
-                  key={set.id} 
-                  className={`p-5 flex items-center justify-between transition-all ${isDone ? 'bg-slate-50/30' : 'bg-white'}`}
-                >
-                  <div className="flex items-center gap-4">
-                    <button onClick={() => toggleSet(set.id)} className="focus:outline-none scale-110 active:scale-90 transition-transform">
-                      {isDone ? (
-                        <CheckCircle2 className="w-9 h-9 text-green-500 fill-green-50" />
-                      ) : (
-                        <Circle className="w-9 h-9 text-slate-100" />
-                      )}
-                    </button>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className={`text-xl font-black tracking-tight ${isDone ? 'text-slate-200 line-through' : 'text-slate-800'}`}>
-                          {weight}kg
-                        </span>
-                        {set.isPR && <span className="bg-rose-500 text-white text-[9px] px-2 py-0.5 rounded-lg font-black uppercase shadow-sm shadow-rose-200">PR</span>}
-                      </div>
-                      <p className="text-[10px] font-black text-slate-400 uppercase">{set.label} · {set.reps} Reps</p>
-                    </div>
-                  </div>
+        )}
 
-                  {set.isPR && (
-                    <div className="flex items-center bg-slate-50 p-1.5 rounded-xl border border-slate-100">
-                      <input 
-                        type="number"
-                        placeholder="0"
-                        className="w-10 h-8 bg-transparent text-center text-sm font-black focus:outline-none"
-                        value={settings.prRecords[key] || ''}
-                        onChange={(e) => updatePR(set.id, parseInt(e.target.value) || 0)}
-                      />
-                      <span className="text-[10px] font-black text-slate-400 pr-2">회</span>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+        {/* 약점 보완일 때 안내 메시지 */}
+        {activeLift === LiftType.WEAKNESS && (
+          <div className="bg-blue-50 rounded-[32px] p-6 border border-blue-100 shadow-sm">
+            <div className="flex items-center gap-3 mb-2">
+              <Info className="w-5 h-5 text-blue-600" />
+              <h3 className="font-black text-blue-900 text-sm">약점 보완 운동</h3>
+            </div>
+            <p className="text-xs text-blue-700 font-bold">
+              약점 보완 운동은 메인 세트 없이 악세사리 운동만 수행합니다.
+            </p>
           </div>
-        </div>
+        )}
 
         {/* Accessories Section */}
         <div className="bg-white rounded-[32px] shadow-sm border border-slate-100 overflow-hidden">
@@ -601,20 +629,22 @@ const App: React.FC = () => {
               1RM 데이터 업데이트
             </h3>
             <div className="grid grid-cols-2 gap-8">
-              {Object.entries(LIFT_LABELS).map(([key, label]) => (
-                <div key={key}>
-                  <label className="block text-[10px] font-black text-slate-400 uppercase mb-3 tracking-widest">{label}</label>
-                  <input
-                    type="number"
-                    value={settings.oneRM[key as LiftType]}
-                    onChange={(e) => setSettings(prev => ({
-                      ...prev,
-                      oneRM: { ...prev.oneRM, [key as LiftType]: parseFloat(e.target.value) || 0 }
-                    }))}
-                    className="w-full bg-slate-50 border border-slate-100 rounded-[20px] p-4 font-black text-slate-900 focus:ring-4 focus:ring-blue-100 outline-none transition-all text-lg"
-                  />
-                </div>
-              ))}
+              {Object.entries(LIFT_LABELS)
+                .filter(([key]) => key !== LiftType.WEAKNESS) // 약점 보완 제외
+                .map(([key, label]) => (
+                  <div key={key}>
+                    <label className="block text-[10px] font-black text-slate-400 uppercase mb-3 tracking-widest">{label}</label>
+                    <input
+                      type="number"
+                      value={settings.oneRM[key as Exclude<LiftType, LiftType.WEAKNESS>]}
+                      onChange={(e) => setSettings(prev => ({
+                        ...prev,
+                        oneRM: { ...prev.oneRM, [key as Exclude<LiftType, LiftType.WEAKNESS>]: parseFloat(e.target.value) || 0 }
+                      }))}
+                      className="w-full bg-slate-50 border border-slate-100 rounded-[20px] p-4 font-black text-slate-900 focus:ring-4 focus:ring-blue-100 outline-none transition-all text-lg"
+                    />
+                  </div>
+                ))}
             </div>
           </div>
 
