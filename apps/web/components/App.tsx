@@ -219,6 +219,15 @@ const App: React.FC = () => {
     }
   };
 
+  const deleteHistoryItem = (id: string) => {
+    if (window.confirm('이 기록을 삭제하시겠습니까?')) {
+      setSettings(prev => ({
+        ...prev,
+        history: prev.history.filter(item => item.id !== id)
+      }));
+    }
+  };
+
   const logWorkout = () => {
     const sets = getSetsForWeek(activeWeek);
     const mainSetsResults = sets.map(s => {
@@ -540,6 +549,13 @@ const App: React.FC = () => {
                     </div>
                     <h4 className="text-xl font-black text-slate-800 tracking-tight">{LIFT_LABELS[entry.lift]}</h4>
                   </div>
+                  <button 
+                    onClick={() => deleteHistoryItem(entry.id)}
+                    className="p-2 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-xl transition-all active:scale-90"
+                    aria-label="삭제"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
                 </div>
                 
                 <div className="space-y-5">
