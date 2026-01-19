@@ -40,7 +40,7 @@ import { supabase } from '@/lib/supabase/client';
 const App: React.FC = () => {
   const { settings, setSettings, loading } = useUserSettings();
   
-  // localStorage에서 마지막 탭 복원
+  // localStorage에서 마지막 상태 복원
   const [activeTab, setActiveTab] = useState<'workout' | 'history' | 'settings'>(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('wendler_last_tab');
@@ -59,8 +59,46 @@ const App: React.FC = () => {
     }
   };
   
-  const [activeWeek, setActiveWeek] = useState<WeekType>(1);
-  const [activeLift, setActiveLift] = useState<LiftType>(LiftType.SQUAT);
+  // localStorage에서 마지막 주차 복원
+  const [activeWeek, setActiveWeek] = useState<WeekType>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('wendler_last_week');
+      if (saved) {
+        const week = parseInt(saved);
+        if (week >= 1 && week <= 7) {
+          return week as WeekType;
+        }
+      }
+    }
+    return 1;
+  });
+  
+  // 주차 변경 시 localStorage에 저장
+  const handleWeekChange = (week: WeekType) => {
+    setActiveWeek(week);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('wendler_last_week', week.toString());
+    }
+  };
+  
+  // localStorage에서 마지막 리프트 복원
+  const [activeLift, setActiveLift] = useState<LiftType>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('wendler_last_lift');
+      if (saved && Object.values(LiftType).includes(saved as LiftType)) {
+        return saved as LiftType;
+      }
+    }
+    return LiftType.SQUAT;
+  });
+  
+  // 리프트 변경 시 localStorage에 저장
+  const handleLiftChange = (lift: LiftType) => {
+    setActiveLift(lift);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('wendler_last_lift', lift);
+    }
+  };
   const [showAddAccessory, setShowAddAccessory] = useState(false);
   
   // Form state for new accessory
@@ -167,7 +205,7 @@ const App: React.FC = () => {
         ...prev,
         currentCycle: prev.currentCycle + 1
       }));
-      setActiveWeek(1);
+      handleWeekChange(1);
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
   };
@@ -237,7 +275,10 @@ const App: React.FC = () => {
           
           <div className="flex items-center justify-between bg-white/5 rounded-3xl p-2">
             <button 
-              onClick={() => setActiveWeek(prev => (prev > 1 ? prev - 1 : 1) as WeekType)}
+              onClick={() => {
+                const newWeek = (activeWeek > 1 ? activeWeek - 1 : 1) as WeekType;
+                handleWeekChange(newWeek);
+              }}
               className="p-3 hover:bg-white/10 rounded-2xl transition-all active:scale-90"
             >
               <ChevronLeft className="w-6 h-6 text-white" />
@@ -249,7 +290,10 @@ const App: React.FC = () => {
               </p>
             </div>
             <button 
-              onClick={() => setActiveWeek(prev => (prev < 7 ? prev + 1 : 7) as WeekType)}
+              onClick={() => {
+                const newWeek = (activeWeek < 7 ? activeWeek + 1 : 7) as WeekType;
+                handleWeekChange(newWeek);
+              }}
               className="p-3 hover:bg-white/10 rounded-2xl transition-all active:scale-90"
             >
               <ChevronRight className="w-6 h-6 text-white" />
@@ -262,7 +306,7 @@ const App: React.FC = () => {
           {Object.values(LiftType).map(lift => (
             <button
               key={lift}
-              onClick={() => setActiveLift(lift)}
+              onClick={() => handleLiftChange(lift)}
               className={`flex-1 min-w-[100px] py-4 px-2 rounded-2xl text-[11px] font-black transition-all border ${
                 activeLift === lift 
                 ? 'bg-blue-600 text-white border-blue-600 shadow-xl shadow-blue-200' 
