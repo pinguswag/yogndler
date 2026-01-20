@@ -18,6 +18,7 @@ import {
   PlusCircle,
   X,
   Clock,
+  Pencil,
 } from 'lucide-react';
 import { 
   LiftType, 
@@ -100,6 +101,7 @@ const App: React.FC = () => {
     }
   };
   const [showAddAccessory, setShowAddAccessory] = useState(false);
+  const [editingAccessoryId, setEditingAccessoryId] = useState<string | null>(null);
   
   // Form state for new accessory
   const [newAcc, setNewAcc] = useState({ name: '', weight: 0, sets: 3, reps: '10' });
@@ -172,26 +174,57 @@ const App: React.FC = () => {
     e.preventDefault();
     if (!newAcc.name) return;
 
-    const accessory: AccessoryExercise = {
-      id: `acc-${Date.now()}`,
-      name: newAcc.name,
-      weight: newAcc.weight,
-      sets: newAcc.sets,
-      reps: newAcc.reps,
-      targetLifts: [activeLift]
-    };
+    if (editingAccessoryId) {
+      // 편집 모드
+      setSettings(prev => ({
+        ...prev,
+        accessories: prev.accessories.map(acc => 
+          acc.id === editingAccessoryId
+            ? {
+                ...acc,
+                name: newAcc.name,
+                weight: newAcc.weight,
+                sets: newAcc.sets,
+                reps: newAcc.reps
+              }
+            : acc
+        )
+      }));
+      setEditingAccessoryId(null);
+    } else {
+      // 추가 모드
+      const accessory: AccessoryExercise = {
+        id: `acc-${Date.now()}`,
+        name: newAcc.name,
+        weight: newAcc.weight,
+        sets: newAcc.sets,
+        reps: newAcc.reps,
+        targetLifts: activeLift === LiftType.WEAKNESS ? [LiftType.WEAKNESS] : [activeLift]
+      };
 
-    const libraryEntry = { name: newAcc.name, weight: newAcc.weight, sets: newAcc.sets, reps: newAcc.reps };
-    const filteredLib = settings.accessoryLibrary.filter(item => item.name !== newAcc.name);
+      const libraryEntry = { name: newAcc.name, weight: newAcc.weight, sets: newAcc.sets, reps: newAcc.reps };
+      const filteredLib = settings.accessoryLibrary.filter(item => item.name !== newAcc.name);
 
-    setSettings(prev => ({
-      ...prev,
-      accessories: [...prev.accessories, accessory],
-      accessoryLibrary: [libraryEntry, ...filteredLib].slice(0, 8) 
-    }));
+      setSettings(prev => ({
+        ...prev,
+        accessories: [...prev.accessories, accessory],
+        accessoryLibrary: [libraryEntry, ...filteredLib].slice(0, 8) 
+      }));
+    }
 
     setNewAcc({ name: '', weight: 0, sets: 3, reps: '10' });
     setShowAddAccessory(false);
+  };
+
+  const handleEditAccessory = (acc: AccessoryExercise) => {
+    setNewAcc({
+      name: acc.name,
+      weight: acc.weight,
+      sets: acc.sets,
+      reps: acc.reps
+    });
+    setEditingAccessoryId(acc.id);
+    setShowAddAccessory(true);
   };
 
   const removeAccessory = (id: string) => {
@@ -424,7 +457,11 @@ const App: React.FC = () => {
               Accessories
             </h3>
             <button 
-              onClick={() => setShowAddAccessory(true)}
+              onClick={() => {
+                setEditingAccessoryId(null);
+                setNewAcc({ name: '', weight: 0, sets: 3, reps: '10' });
+                setShowAddAccessory(true);
+              }}
               className="flex items-center gap-1 px-3 py-1.5 bg-emerald-500 text-white rounded-xl font-black text-[10px] uppercase shadow-lg shadow-emerald-100 active:scale-95 transition-all"
             >
               <Plus className="w-3.5 h-3.5" />
@@ -450,12 +487,22 @@ const App: React.FC = () => {
                       <span className="text-slate-600 font-black">{acc.reps} Reps</span>
                     </div>
                   </div>
-                  <button 
-                    onClick={() => removeAccessory(acc.id)}
-                    className="p-3 text-slate-200 hover:text-rose-500 hover:bg-rose-50 rounded-xl transition-all"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button 
+                      onClick={() => handleEditAccessory(acc)}
+                      className="p-3 text-slate-300 hover:text-blue-500 hover:bg-blue-50 rounded-xl transition-all"
+                      aria-label="편집"
+                    >
+                      <Pencil className="w-4 h-4" />
+                    </button>
+                    <button 
+                      onClick={() => removeAccessory(acc.id)}
+                      className="p-3 text-slate-200 hover:text-rose-500 hover:bg-rose-50 rounded-xl transition-all"
+                      aria-label="삭제"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
               ))
             )}
@@ -483,8 +530,19 @@ const App: React.FC = () => {
           <div className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-md flex items-end sm:items-center justify-center p-0 sm:p-6">
             <div className="bg-white w-full max-w-sm rounded-t-[40px] sm:rounded-[40px] shadow-2xl p-8 animate-in slide-in-from-bottom-full sm:slide-in-from-bottom-0 sm:zoom-in-95 duration-300">
               <div className="flex justify-between items-center mb-8">
-                <h3 className="text-xl font-black text-slate-800">보조 운동 추가</h3>
-                <button onClick={() => setShowAddAccessory(false)} className="bg-slate-50 p-2.5 rounded-full text-slate-400"><X className="w-5 h-5" /></button>
+                <h3 className="text-xl font-black text-slate-800">
+                  {editingAccessoryId ? '보조 운동 편집' : '보조 운동 추가'}
+                </h3>
+                <button 
+                  onClick={() => {
+                    setShowAddAccessory(false);
+                    setEditingAccessoryId(null);
+                    setNewAcc({ name: '', weight: 0, sets: 3, reps: '10' });
+                  }} 
+                  className="bg-slate-50 p-2.5 rounded-full text-slate-400"
+                >
+                  <X className="w-5 h-5" />
+                </button>
               </div>
 
               {/* Accessory Library: Horizontal Scroll of Chips */}
@@ -534,7 +592,7 @@ const App: React.FC = () => {
                   </div>
                 </div>
                 <button type="submit" className="w-full bg-blue-600 text-white py-5 rounded-[24px] font-black text-sm uppercase tracking-widest mt-4 shadow-2xl shadow-blue-200 active:scale-[0.98] transition-all">
-                  추가하기
+                  {editingAccessoryId ? '수정하기' : '추가하기'}
                 </button>
               </form>
             </div>
