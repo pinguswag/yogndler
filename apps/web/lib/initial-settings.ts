@@ -1,5 +1,4 @@
 import { LiftType, UserSettings } from '@/types';
-import { INITIAL_ACCESSORIES } from '@/constants';
 
 export const getInitialSettings = (): UserSettings => {
   return {
@@ -11,7 +10,7 @@ export const getInitialSettings = (): UserSettings => {
       [LiftType.BENCH]: 111, 
     },
     tmPercentage: 0.9,
-    accessories: INITIAL_ACCESSORIES.map(a => ({ ...a, weight: 0 })),
+    accessories: [], // 초기 악세사리 자동 추가 제거 (불러오기로만 추가)
     accessoryLibrary: [],
     completedSets: {},
     prRecords: {},

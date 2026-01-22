@@ -234,7 +234,21 @@ const App: React.FC = () => {
   const removeAccessory = (id: string) => {
     setSettings(prev => ({
       ...prev,
-      accessories: prev.accessories.filter(a => a.id !== id)
+      accessories: prev.accessories.map(acc => {
+        if (acc.id !== id) return acc;
+        
+        // 현재 리프트를 targetLifts에서 제거
+        const newTargetLifts = acc.targetLifts.filter(lift => lift !== activeLift);
+        
+        // targetLifts가 비어있으면 완전히 삭제, 아니면 업데이트
+        if (newTargetLifts.length === 0) {
+          return null; // 필터에서 제거됨
+        }
+        return {
+          ...acc,
+          targetLifts: newTargetLifts
+        };
+      }).filter(Boolean) as AccessoryExercise[] // null 제거
     }));
   };
 
