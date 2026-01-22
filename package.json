@@ -3,9 +3,9 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "build": "npm install && npm run build",
-    "dev": "npm run dev",
-    "start": "npm run start"
+    "build": "cd apps/web && npm install && npm run build",
+    "dev": "cd apps/web && npm run dev",
+    "start": "cd apps/web && npm run start"
   },
   "engines": {
     "node": ">=18.0.0"

@@ -20,6 +20,8 @@ import {
   Clock,
   Pencil,
 } from 'lucide-react';
+import { WendlerGuideModal } from './WendlerGuideModal';
+import { OneRMCalculator } from './OneRMCalculator';
 import { 
   LiftType, 
   WeekType, 
@@ -109,6 +111,13 @@ const App: React.FC = () => {
   
   // Form state for editing history
   const [editingHistory, setEditingHistory] = useState<WorkoutHistory | null>(null);
+  
+  // Guide modal state
+  const [showGuideModal, setShowGuideModal] = useState(false);
+  
+  // 1RM Calculator state
+  const [showOneRMCalculator, setShowOneRMCalculator] = useState(false);
+  const [calculatorTargetLift, setCalculatorTargetLift] = useState<Exclude<LiftType, LiftType.WEAKNESS> | null>(null);
 
   // TM Calculation Logic based on user's specific progression rules
   const currentTMs = useMemo(() => {
@@ -934,6 +943,18 @@ const App: React.FC = () => {
                   </div>
                 ))}
             </div>
+            <div className="mt-6">
+              <button
+                onClick={() => {
+                  setCalculatorTargetLift(null);
+                  setShowOneRMCalculator(true);
+                }}
+                className="w-full py-4 bg-blue-50 border border-blue-100 text-blue-600 font-black text-[11px] uppercase rounded-2xl active:scale-95 transition-all flex items-center justify-center gap-2"
+              >
+                <Info className="w-4 h-4" />
+                최근 운동 기록으로 1RM 계산하기
+              </button>
+            </div>
           </div>
 
           <div className="pt-2">
@@ -989,11 +1010,20 @@ const App: React.FC = () => {
   return (
     <div className="max-w-md mx-auto min-h-screen flex flex-col bg-slate-50 font-sans selection:bg-blue-100 overflow-x-hidden">
       <header className="px-6 pt-14 pb-6 bg-white/70 backdrop-blur-2xl sticky top-0 z-[60] border-b border-slate-100">
-        <h1 className="text-xl font-black text-slate-900 tracking-tighter flex items-center gap-3 uppercase">
-          <div className="w-10 h-10 bg-slate-900 rounded-2xl flex items-center justify-center -rotate-3 shadow-2xl shadow-slate-300">
-            <Dumbbell className="w-5 h-5 text-white" />
+        <h1 className="text-xl font-black text-slate-900 tracking-tighter flex items-center justify-between uppercase">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-slate-900 rounded-2xl flex items-center justify-center -rotate-3 shadow-2xl shadow-slate-300">
+              <Dumbbell className="w-5 h-5 text-white" />
+            </div>
+            Wendler <span className="text-blue-600">5/3/1</span>
           </div>
-          Wendler <span className="text-blue-600">5/3/1</span>
+          <button
+            onClick={() => setShowGuideModal(true)}
+            className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all active:scale-90"
+            aria-label="가이드 보기"
+          >
+            <Info className="w-5 h-5" />
+          </button>
         </h1>
       </header>
 
@@ -1034,6 +1064,30 @@ const App: React.FC = () => {
       
       {/* Visual Safety Margin for Bottom */}
       <div className="h-10"></div>
+
+      {/* Wendler Guide Modal */}
+      <WendlerGuideModal 
+        isOpen={showGuideModal}
+        onClose={() => setShowGuideModal(false)}
+      />
+
+      {/* 1RM Calculator Modal */}
+      <OneRMCalculator
+        isOpen={showOneRMCalculator}
+        onClose={() => {
+          setShowOneRMCalculator(false);
+          setCalculatorTargetLift(null);
+        }}
+        onApply={(oneRM, liftType) => {
+          if (liftType) {
+            setSettings(prev => ({
+              ...prev,
+              oneRM: { ...prev.oneRM, [liftType]: oneRM }
+            }));
+          }
+        }}
+        targetLift={calculatorTargetLift}
+      />
     </div>
   );
 };

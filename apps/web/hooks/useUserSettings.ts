@@ -138,7 +138,7 @@ export function useUserSettings() {
 
       return updated;
     });
-  }, [userId]);
+  }, [userId, saveSettingsToDB]);
 
   // Cleanup debounce timer on unmount
   useEffect(() => {
