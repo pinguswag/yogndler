@@ -13,6 +13,8 @@ import {
   Info,
   ChevronLeft,
   ChevronRight,
+  ChevronUp,
+  ChevronDown,
   Save,
   RotateCcw,
   PlusCircle,
@@ -20,7 +22,6 @@ import {
   Clock,
   Pencil,
 } from 'lucide-react';
-import { WendlerGuideModal } from './WendlerGuideModal';
 import { OneRMCalculator } from './OneRMCalculator';
 import { 
   LiftType, 
@@ -44,18 +45,18 @@ const App: React.FC = () => {
   const { settings, setSettings, loading } = useUserSettings();
   
   // localStorage에서 마지막 상태 복원
-  const [activeTab, setActiveTab] = useState<'workout' | 'history' | 'settings'>(() => {
+  const [activeTab, setActiveTab] = useState<'workout' | 'history' | 'settings' | 'guide'>(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('wendler_last_tab');
-      if (saved && ['workout', 'history', 'settings'].includes(saved)) {
-        return saved as 'workout' | 'history' | 'settings';
+      if (saved && ['workout', 'history', 'settings', 'guide'].includes(saved)) {
+        return saved as 'workout' | 'history' | 'settings' | 'guide';
       }
     }
     return 'workout';
   });
   
   // 탭 변경 시 localStorage에 저장
-  const handleTabChange = (tab: 'workout' | 'history' | 'settings') => {
+  const handleTabChange = (tab: 'workout' | 'history' | 'settings' | 'guide') => {
     setActiveTab(tab);
     if (typeof window !== 'undefined') {
       localStorage.setItem('wendler_last_tab', tab);
@@ -112,12 +113,12 @@ const App: React.FC = () => {
   // Form state for editing history
   const [editingHistory, setEditingHistory] = useState<WorkoutHistory | null>(null);
   
-  // Guide modal state
-  const [showGuideModal, setShowGuideModal] = useState(false);
-  
   // 1RM Calculator state
   const [showOneRMCalculator, setShowOneRMCalculator] = useState(false);
   const [calculatorTargetLift, setCalculatorTargetLift] = useState<Exclude<LiftType, LiftType.WEAKNESS> | null>(null);
+  
+  // Guide accordion state
+  const [openGuideSections, setOpenGuideSections] = useState<Set<string>>(new Set(['what', 'cycle']));
 
   // TM Calculation Logic based on user's specific progression rules
   const currentTMs = useMemo(() => {
@@ -1007,23 +1008,103 @@ const App: React.FC = () => {
     );
   };
 
+  const renderGuide = () => {
+    const toggleSection = (section: string) => {
+      setOpenGuideSections(prev => {
+        const next = new Set(prev);
+        if (next.has(section)) {
+          next.delete(section);
+        } else {
+          next.add(section);
+        }
+        return next;
+      });
+    };
+
+    const sections = [
+      {
+        id: 'what',
+        title: '5/3/1이란?',
+        content: '최대 중량보다 낮은 무게를 사용하여 점진적으로 강도를 높여가는 근력 훈련 프로그램입니다. 매 세션마다 최대 중량을 들기보다는 시간에 걸쳐 근력을 쌓는 것에 중점을 둡니다.'
+      },
+      {
+        id: 'cycle',
+        title: '사이클 구조',
+        content: '각 사이클은 7주로 구성됩니다: 메인 운동 3주, 보조 운동 3주, 그리고 디로딩 1주. 디로딩 후에는 Training Max를 증가시켜 새로운 사이클을 시작합니다.'
+      },
+      {
+        id: 'tm',
+        title: 'Training Max (TM)',
+        content: '실제 1RM의 90%를 시작점으로 사용합니다. 이 보수적인 접근 방식은 모든 반복을 올바른 자세로 완료할 수 있게 보장하며, 과로 없이 장기적인 진전을 가능하게 합니다.'
+      },
+      {
+        id: 'flow',
+        title: '주간 흐름',
+        content: '워밍업 세트 → 메인 워킹 세트 → PR 세트 (최대한 많은 반복, "x+"로 표시) → 강할 때 선택적 조커 세트. 항상 무게보다 자세를 우선시하세요.'
+      },
+      {
+        id: 'pr-joker',
+        title: 'PR & 조커 규칙',
+        content: 'PR 세트는 RPE 9 정도(여유 반복 1개)에서 멈추세요. 피로하거나 자세가 무너지면 조커 세트를 건너뛰세요. 이것들은 선택적인 강도 부스터이며 필수는 아닙니다.'
+      },
+      {
+        id: 'supplemental',
+        title: '보조 운동',
+        content: '하나의 접근 방식을 선택하세요: FSL (First Set Last - 첫 워킹 세트 반복), SSL (Second Set Last), 또는 BBB (Boring But Big - 가벼운 무게로 5x10). 프로그램을 섞지 마세요.'
+      },
+      {
+        id: 'who',
+        title: '누구에게 적합한가 / 부적합한가',
+        content: '꾸준하고 지속 가능한 근력 향상을 원하는 중급~고급 운동자에게 가장 적합합니다. 완전 초보자나 지속적인 다양성이나 고빈도 훈련이 필요한 사람에게는 이상적이지 않습니다.'
+      }
+    ];
+
+    return (
+      <div className="space-y-6 pb-48 animate-in fade-in slide-in-from-bottom-4 duration-500">
+        <h2 className="text-3xl font-black text-slate-900 px-2 flex items-center gap-2 tracking-tight">
+          <Info className="w-7 h-7 text-blue-600" />
+          가이드
+        </h2>
+
+        <div className="space-y-3">
+          {sections.map(section => {
+            const isOpen = openGuideSections.has(section.id);
+            return (
+              <div key={section.id} className="border border-slate-100 rounded-2xl overflow-hidden bg-white">
+                <button
+                  onClick={() => toggleSection(section.id)}
+                  className="w-full p-4 flex justify-between items-center bg-slate-50 hover:bg-slate-100 transition-colors"
+                >
+                  <span className="text-sm font-black text-slate-800 text-left">{section.title}</span>
+                  {isOpen ? (
+                    <ChevronUp className="w-5 h-5 text-slate-400 shrink-0" />
+                  ) : (
+                    <ChevronDown className="w-5 h-5 text-slate-400 shrink-0" />
+                  )}
+                </button>
+                {isOpen && (
+                  <div className="p-4 bg-white">
+                    <p className="text-xs text-slate-600 leading-relaxed font-medium">
+                      {section.content}
+                    </p>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="max-w-md mx-auto min-h-screen flex flex-col bg-slate-50 font-sans selection:bg-blue-100 overflow-x-hidden">
       <header className="px-6 pt-14 pb-6 bg-white/70 backdrop-blur-2xl sticky top-0 z-[60] border-b border-slate-100">
-        <h1 className="text-xl font-black text-slate-900 tracking-tighter flex items-center justify-between uppercase">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-slate-900 rounded-2xl flex items-center justify-center -rotate-3 shadow-2xl shadow-slate-300">
-              <Dumbbell className="w-5 h-5 text-white" />
-            </div>
-            Wendler <span className="text-blue-600">5/3/1</span>
+        <h1 className="text-xl font-black text-slate-900 tracking-tighter flex items-center gap-3 uppercase">
+          <div className="w-10 h-10 bg-slate-900 rounded-2xl flex items-center justify-center -rotate-3 shadow-2xl shadow-slate-300">
+            <Dumbbell className="w-5 h-5 text-white" />
           </div>
-          <button
-            onClick={() => setShowGuideModal(true)}
-            className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all active:scale-90"
-            aria-label="가이드 보기"
-          >
-            <Info className="w-5 h-5" />
-          </button>
+          Wendler <span className="text-blue-600">5/3/1</span>
         </h1>
       </header>
 
@@ -1031,6 +1112,7 @@ const App: React.FC = () => {
         {activeTab === 'workout' && renderWorkout()}
         {activeTab === 'history' && renderHistory()}
         {activeTab === 'settings' && renderSettings()}
+        {activeTab === 'guide' && renderGuide()}
       </main>
 
       {/* Modern High-End Floating Navigation */}
@@ -1059,17 +1141,19 @@ const App: React.FC = () => {
             <Settings className={`w-5 h-5 ${activeTab === 'settings' ? 'text-blue-500' : ''}`} />
             <span className="text-[9px] font-black uppercase tracking-widest">Settings</span>
           </button>
+          
+          <button 
+            onClick={() => handleTabChange('guide')} 
+            className={`flex-1 flex flex-col items-center gap-2 py-3.5 transition-all rounded-[32px] ${activeTab === 'guide' ? 'bg-white/10 text-white scale-[1.05]' : 'text-slate-500 opacity-60'}`}
+          >
+            <Info className={`w-5 h-5 ${activeTab === 'guide' ? 'text-blue-500' : ''}`} />
+            <span className="text-[9px] font-black uppercase tracking-widest">Guide</span>
+          </button>
         </div>
       </nav>
       
       {/* Visual Safety Margin for Bottom */}
       <div className="h-10"></div>
-
-      {/* Wendler Guide Modal */}
-      <WendlerGuideModal 
-        isOpen={showGuideModal}
-        onClose={() => setShowGuideModal(false)}
-      />
 
       {/* 1RM Calculator Modal */}
       <OneRMCalculator
