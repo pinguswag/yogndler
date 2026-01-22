@@ -102,9 +102,13 @@ const App: React.FC = () => {
   };
   const [showAddAccessory, setShowAddAccessory] = useState(false);
   const [editingAccessoryId, setEditingAccessoryId] = useState<string | null>(null);
+  const [editingHistoryId, setEditingHistoryId] = useState<string | null>(null);
   
   // Form state for new accessory
   const [newAcc, setNewAcc] = useState({ name: '', weight: 0, sets: 3, reps: '10' });
+  
+  // Form state for editing history
+  const [editingHistory, setEditingHistory] = useState<WorkoutHistory | null>(null);
 
   // TM Calculation Logic based on user's specific progression rules
   const currentTMs = useMemo(() => {
@@ -261,6 +265,61 @@ const App: React.FC = () => {
         history: prev.history.filter(item => item.id !== id)
       }));
     }
+  };
+
+  const handleEditHistory = (entry: WorkoutHistory) => {
+    setEditingHistory(JSON.parse(JSON.stringify(entry))); // Deep copy
+    setEditingHistoryId(entry.id);
+  };
+
+  const handleSaveHistoryEdit = () => {
+    if (!editingHistory) return;
+
+    setSettings(prev => ({
+      ...prev,
+      history: prev.history.map(item => 
+        item.id === editingHistoryId ? editingHistory : item
+      )
+    }));
+
+    setEditingHistory(null);
+    setEditingHistoryId(null);
+  };
+
+  const updateHistoryMainSet = (setIndex: number, field: 'weight' | 'reps' | 'completed', value: number | string | boolean) => {
+    if (!editingHistory) return;
+    setEditingHistory({
+      ...editingHistory,
+      mainSets: editingHistory.mainSets.map((set, idx) => 
+        idx === setIndex ? { ...set, [field]: value } : set
+      )
+    });
+  };
+
+  const updateHistoryAccessory = (accIndex: number, field: 'name' | 'weight' | 'sets' | 'reps', value: string | number) => {
+    if (!editingHistory) return;
+    setEditingHistory({
+      ...editingHistory,
+      accessories: editingHistory.accessories.map((acc, idx) => 
+        idx === accIndex ? { ...acc, [field]: value } : acc
+      )
+    });
+  };
+
+  const addHistoryAccessory = () => {
+    if (!editingHistory) return;
+    setEditingHistory({
+      ...editingHistory,
+      accessories: [...editingHistory.accessories, { name: '', weight: 0, sets: 3, reps: '10' }]
+    });
+  };
+
+  const removeHistoryAccessory = (accIndex: number) => {
+    if (!editingHistory) return;
+    setEditingHistory({
+      ...editingHistory,
+      accessories: editingHistory.accessories.filter((_, idx) => idx !== accIndex)
+    });
   };
 
   const logWorkout = () => {
@@ -635,13 +694,22 @@ const App: React.FC = () => {
                     </div>
                     <h4 className="text-xl font-black text-slate-800 tracking-tight">{LIFT_LABELS[entry.lift]}</h4>
                   </div>
-                  <button 
-                    onClick={() => deleteHistoryItem(entry.id)}
-                    className="p-2 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-xl transition-all active:scale-90"
-                    aria-label="삭제"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button 
+                      onClick={() => handleEditHistory(entry)}
+                      className="p-2 text-slate-300 hover:text-blue-500 hover:bg-blue-50 rounded-xl transition-all active:scale-90"
+                      aria-label="편집"
+                    >
+                      <Pencil className="w-4 h-4" />
+                    </button>
+                    <button 
+                      onClick={() => deleteHistoryItem(entry.id)}
+                      className="p-2 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-xl transition-all active:scale-90"
+                      aria-label="삭제"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
                 
                 <div className="space-y-5">
@@ -666,6 +734,154 @@ const App: React.FC = () => {
                 </div>
               </div>
             ))}
+          </div>
+        )}
+
+        {/* Modal: Edit History */}
+        {editingHistory && (
+          <div className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-md flex items-end sm:items-center justify-center p-0 sm:p-6">
+            <div className="bg-white w-full max-w-sm rounded-t-[40px] sm:rounded-[40px] shadow-2xl p-8 animate-in slide-in-from-bottom-full sm:slide-in-from-bottom-0 sm:zoom-in-95 duration-300 max-h-[90vh] overflow-y-auto">
+              <div className="flex justify-between items-center mb-8 sticky top-0 bg-white pb-4 border-b border-slate-100">
+                <h3 className="text-xl font-black text-slate-800">기록 편집</h3>
+                <button 
+                  onClick={() => {
+                    setEditingHistory(null);
+                    setEditingHistoryId(null);
+                  }} 
+                  className="bg-slate-50 p-2.5 rounded-full text-slate-400 hover:bg-slate-100 transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="space-y-6">
+                {/* Main Sets */}
+                {editingHistory.mainSets.length > 0 && (
+                  <div>
+                    <h4 className="text-sm font-black text-slate-800 mb-4 uppercase tracking-wider">메인 세트</h4>
+                    <div className="space-y-3">
+                      {editingHistory.mainSets.map((set, idx) => (
+                        <div key={idx} className="bg-slate-50 rounded-2xl p-4 border border-slate-100">
+                          <div className="flex items-center justify-between mb-3">
+                            <span className="text-xs font-black text-slate-600">{set.label}</span>
+                            <label className="flex items-center gap-2 text-xs font-black text-slate-600">
+                              <input
+                                type="checkbox"
+                                checked={set.completed}
+                                onChange={(e) => updateHistoryMainSet(idx, 'completed', e.target.checked)}
+                                className="w-4 h-4 rounded border-slate-300"
+                              />
+                              완료
+                            </label>
+                          </div>
+                          <div className="grid grid-cols-2 gap-3">
+                            <div>
+                              <label className="text-[10px] font-black text-slate-400 uppercase mb-1 block">무게(kg)</label>
+                              <input
+                                type="number"
+                                value={set.weight}
+                                onChange={(e) => updateHistoryMainSet(idx, 'weight', parseFloat(e.target.value) || 0)}
+                                className="w-full bg-white border border-slate-200 p-2 rounded-xl text-sm font-black outline-none"
+                              />
+                            </div>
+                            <div>
+                              <label className="text-[10px] font-black text-slate-400 uppercase mb-1 block">횟수</label>
+                              <input
+                                type="text"
+                                value={set.reps}
+                                onChange={(e) => updateHistoryMainSet(idx, 'reps', e.target.value)}
+                                className="w-full bg-white border border-slate-200 p-2 rounded-xl text-sm font-black outline-none"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Accessories */}
+                <div>
+                  <div className="flex justify-between items-center mb-4">
+                    <h4 className="text-sm font-black text-slate-800 uppercase tracking-wider">악세사리</h4>
+                    <button
+                      onClick={addHistoryAccessory}
+                      className="px-3 py-1.5 bg-emerald-500 text-white rounded-xl font-black text-[10px] uppercase shadow-lg shadow-emerald-100 active:scale-95 transition-all"
+                    >
+                      <Plus className="w-3 h-3 inline mr-1" />
+                      추가
+                    </button>
+                  </div>
+                  <div className="space-y-3">
+                    {editingHistory.accessories.map((acc, idx) => (
+                      <div key={idx} className="bg-slate-50 rounded-2xl p-4 border border-slate-100">
+                        <div className="flex justify-between items-center mb-3">
+                          <span className="text-xs font-black text-slate-600">악세사리 {idx + 1}</span>
+                          <button
+                            onClick={() => removeHistoryAccessory(idx)}
+                            className="p-1.5 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-all"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                        <div className="grid grid-cols-2 gap-3 mb-3">
+                          <div>
+                            <label className="text-[10px] font-black text-slate-400 uppercase mb-1 block">이름</label>
+                            <input
+                              type="text"
+                              value={acc.name}
+                              onChange={(e) => updateHistoryAccessory(idx, 'name', e.target.value)}
+                              className="w-full bg-white border border-slate-200 p-2 rounded-xl text-sm font-black outline-none"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[10px] font-black text-slate-400 uppercase mb-1 block">무게(kg)</label>
+                            <input
+                              type="number"
+                              value={acc.weight}
+                              onChange={(e) => updateHistoryAccessory(idx, 'weight', parseFloat(e.target.value) || 0)}
+                              className="w-full bg-white border border-slate-200 p-2 rounded-xl text-sm font-black outline-none"
+                            />
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="text-[10px] font-black text-slate-400 uppercase mb-1 block">세트</label>
+                            <input
+                              type="number"
+                              value={acc.sets}
+                              onChange={(e) => updateHistoryAccessory(idx, 'sets', parseInt(e.target.value) || 0)}
+                              className="w-full bg-white border border-slate-200 p-2 rounded-xl text-sm font-black outline-none"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[10px] font-black text-slate-400 uppercase mb-1 block">횟수</label>
+                            <input
+                              type="text"
+                              value={acc.reps}
+                              onChange={(e) => updateHistoryAccessory(idx, 'reps', e.target.value)}
+                              className="w-full bg-white border border-slate-200 p-2 rounded-xl text-sm font-black outline-none"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                    {editingHistory.accessories.length === 0 && (
+                      <div className="text-center py-8 text-slate-300 text-xs font-black uppercase">
+                        악세사리가 없습니다
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <button
+                  onClick={handleSaveHistoryEdit}
+                  className="w-full bg-blue-600 text-white py-5 rounded-[24px] font-black text-sm uppercase tracking-widest mt-4 shadow-2xl shadow-blue-200 active:scale-[0.98] transition-all"
+                >
+                  저장하기
+                </button>
+              </div>
+            </div>
           </div>
         )}
       </div>
