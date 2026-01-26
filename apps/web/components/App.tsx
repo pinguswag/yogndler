@@ -750,7 +750,7 @@ const App: React.FC = () => {
                       {entry.accessories.map((acc, idx) => (
                         <div key={idx} className="bg-slate-900 px-4 py-2.5 rounded-2xl border border-white/5 shadow-sm">
                           <p className="text-[10px] font-black text-white/90 mb-0.5">{acc.name}</p>
-                          <p className="text-[9px] font-black text-blue-400 uppercase">{acc.weight}kg · {acc.sets}S</p>
+                          <p className="text-[9px] font-black text-blue-400 uppercase">{acc.weight}kg · {acc.sets}S · {acc.reps}</p>
                         </div>
                       ))}
                     </div>
