@@ -170,6 +170,24 @@ const App: React.FC = () => {
     };
   }, [settings?.oneRM, settings?.tmPercentage, settings?.currentCycle, activeWeek]);
 
+  const historyByCycleWeek = useMemo(() => {
+    const history = settings?.history ?? [];
+    const map = new Map<number, Map<number, WorkoutHistory[]>>();
+    const sorted = [...history].sort((a, b) => getEntrySortKey(b) - getEntrySortKey(a));
+    for (const entry of sorted) {
+      if (!map.has(entry.cycle)) map.set(entry.cycle, new Map());
+      const weekMap = map.get(entry.cycle)!;
+      if (!weekMap.has(entry.week)) weekMap.set(entry.week, []);
+      weekMap.get(entry.week)!.push(entry);
+    }
+    return map;
+  }, [settings?.history]);
+
+  const weeklyE1RMPerLift = useMemo(
+    () => getWeeklyE1RMPerLift(settings?.history ?? []),
+    [settings?.history]
+  );
+
   if (loading || !settings) {
     return (
       <div className="max-w-md mx-auto min-h-screen flex flex-col bg-slate-50 font-sans selection:bg-blue-100 overflow-x-hidden">
@@ -697,23 +715,6 @@ const App: React.FC = () => {
       </div>
     );
   };
-
-  const historyByCycleWeek = useMemo(() => {
-    const map = new Map<number, Map<number, WorkoutHistory[]>>();
-    const sorted = [...settings.history].sort((a, b) => getEntrySortKey(b) - getEntrySortKey(a));
-    for (const entry of sorted) {
-      if (!map.has(entry.cycle)) map.set(entry.cycle, new Map());
-      const weekMap = map.get(entry.cycle)!;
-      if (!weekMap.has(entry.week)) weekMap.set(entry.week, []);
-      weekMap.get(entry.week)!.push(entry);
-    }
-    return map;
-  }, [settings.history]);
-
-  const weeklyE1RMPerLift = useMemo(
-    () => getWeeklyE1RMPerLift(settings.history),
-    [settings.history]
-  );
 
   const renderHistory = () => {
     const cycles = Array.from(historyByCycleWeek.keys()).sort((a, b) => a - b);
