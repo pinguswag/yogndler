@@ -21,6 +21,7 @@ import {
   X,
   Clock,
   Pencil,
+  TrendingUp,
 } from 'lucide-react';
 import { OneRMCalculator } from './OneRMCalculator';
 import { 
@@ -38,6 +39,12 @@ import {
   calculateTM, 
   calculateWeight, 
 } from '@/utils/calculators';
+import {
+  getWeekSummary,
+  getWeeklyE1RMPerLift,
+  getLiftE1RMSummary,
+  getEntrySortKey,
+} from '@/utils/history-analysis';
 import { useUserSettings } from '@/hooks/useUserSettings';
 import { supabase } from '@/lib/supabase/client';
 
@@ -45,18 +52,18 @@ const App: React.FC = () => {
   const { settings, setSettings, loading } = useUserSettings();
   
   // localStorage에서 마지막 상태 복원
-  const [activeTab, setActiveTab] = useState<'workout' | 'history' | 'settings' | 'guide'>(() => {
+  const [activeTab, setActiveTab] = useState<'workout' | 'history' | 'settings' | 'guide' | 'analysis'>(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('wendler_last_tab');
-      if (saved && ['workout', 'history', 'settings', 'guide'].includes(saved)) {
-        return saved as 'workout' | 'history' | 'settings' | 'guide';
+      if (saved && ['workout', 'history', 'settings', 'guide', 'analysis'].includes(saved)) {
+        return saved as 'workout' | 'history' | 'settings' | 'guide' | 'analysis';
       }
     }
     return 'workout';
   });
   
   // 탭 변경 시 localStorage에 저장
-  const handleTabChange = (tab: 'workout' | 'history' | 'settings' | 'guide') => {
+  const handleTabChange = (tab: 'workout' | 'history' | 'settings' | 'guide' | 'analysis') => {
     setActiveTab(tab);
     if (typeof window !== 'undefined') {
       localStorage.setItem('wendler_last_tab', tab);
@@ -119,6 +126,11 @@ const App: React.FC = () => {
   
   // Guide accordion state
   const [openGuideSections, setOpenGuideSections] = useState<Set<string>>(new Set(['what', 'cycle']));
+  // History accordion: which cycle and which week are expanded (e.g. "1-2" = cycle 1 week 2)
+  const [openHistoryCycles, setOpenHistoryCycles] = useState<Set<number>>(new Set());
+  const [openHistoryWeeks, setOpenHistoryWeeks] = useState<Set<string>>(new Set());
+  // Analysis tab: which lift section is expanded
+  const [openAnalysisLift, setOpenAnalysisLift] = useState<Exclude<LiftType, LiftType.WEAKNESS> | null>(null);
 
   // TM Calculation Logic based on user's specific progression rules
   const currentTMs = useMemo(() => {
@@ -373,6 +385,7 @@ const App: React.FC = () => {
     const historyEntry: WorkoutHistory = {
       id: `hist-${Date.now()}`,
       date: new Date().toLocaleDateString('ko-KR', { month: 'short', day: 'numeric', weekday: 'short' }),
+      timestamp: Date.now(),
       cycle: settings.currentCycle,
       week: activeWeek,
       lift: activeLift,
@@ -685,7 +698,96 @@ const App: React.FC = () => {
     );
   };
 
+  const historyByCycleWeek = useMemo(() => {
+    const map = new Map<number, Map<number, WorkoutHistory[]>>();
+    const sorted = [...settings.history].sort((a, b) => getEntrySortKey(b) - getEntrySortKey(a));
+    for (const entry of sorted) {
+      if (!map.has(entry.cycle)) map.set(entry.cycle, new Map());
+      const weekMap = map.get(entry.cycle)!;
+      if (!weekMap.has(entry.week)) weekMap.set(entry.week, []);
+      weekMap.get(entry.week)!.push(entry);
+    }
+    return map;
+  }, [settings.history]);
+
+  const weeklyE1RMPerLift = useMemo(
+    () => getWeeklyE1RMPerLift(settings.history),
+    [settings.history]
+  );
+
   const renderHistory = () => {
+    const cycles = Array.from(historyByCycleWeek.keys()).sort((a, b) => a - b);
+
+    const toggleCycle = (c: number) => {
+      setOpenHistoryCycles(prev => {
+        const next = new Set(prev);
+        if (next.has(c)) next.delete(c);
+        else next.add(c);
+        return next;
+      });
+    };
+    const toggleWeek = (c: number, w: number) => {
+      const key = `${c}-${w}`;
+      setOpenHistoryWeeks(prev => {
+        const next = new Set(prev);
+        if (next.has(key)) next.delete(key);
+        else next.add(key);
+        return next;
+      });
+    };
+
+    const renderHistoryCard = (entry: WorkoutHistory) => (
+      <div key={entry.id} className="bg-white rounded-[32px] p-6 border border-slate-100 shadow-sm">
+        <div className="flex justify-between items-start mb-5">
+          <div>
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-[9px] font-black text-blue-600 bg-blue-50 px-2.5 py-1 rounded-lg uppercase tracking-wider border border-blue-100">C{entry.cycle} · W{entry.week}</span>
+              <span className="text-[9px] font-black text-slate-400 bg-slate-50 px-2.5 py-1 rounded-lg uppercase tracking-wider">{entry.date}</span>
+            </div>
+            <h4 className="text-xl font-black text-slate-800 tracking-tight">{LIFT_LABELS[entry.lift]}</h4>
+          </div>
+          <div className="flex items-center gap-2">
+            <button 
+              onClick={() => handleEditHistory(entry)}
+              className="p-2 text-slate-300 hover:text-blue-500 hover:bg-blue-50 rounded-xl transition-all active:scale-90"
+              aria-label="편집"
+            >
+              <Pencil className="w-4 h-4" />
+            </button>
+            <button 
+              onClick={() => deleteHistoryItem(entry.id)}
+              className="p-2 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-xl transition-all active:scale-90"
+              aria-label="삭제"
+            >
+              <Trash2 className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+        <div className="space-y-5">
+          <div className="grid grid-cols-3 gap-2.5">
+            {entry.mainSets.map((s, idx) => (
+              <div key={idx} className={`p-3 rounded-2xl text-center flex flex-col gap-1.5 border transition-all ${s.completed ? 'bg-blue-50/50 border-blue-100' : 'bg-slate-50/50 border-slate-50 opacity-30'}`}>
+                <span className="text-xs font-black text-slate-900 tracking-tighter">{s.weight}kg</span>
+                <span className="text-[9px] font-black text-blue-500 uppercase">{s.reps}회</span>
+              </div>
+            ))}
+          </div>
+          {entry.accessories.length > 0 && (
+            <div className="pt-5 border-t border-slate-50 flex flex-wrap gap-2.5">
+              {entry.accessories.map((acc, idx) => (
+                <div key={idx} className="bg-slate-900 px-4 py-2.5 rounded-2xl border border-white/5 shadow-sm">
+                  <p className="text-[10px] font-black text-white/90 mb-0.5">{acc.name}</p>
+                  <p className="text-[9px] font-black text-blue-400 uppercase">{acc.weight}kg · {acc.sets}S · {acc.reps}</p>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+
+    const mainLiftsOrder = [LiftType.SQUAT, LiftType.BENCH, LiftType.DEADLIFT, LiftType.OHP];
+
     return (
       <div className="space-y-6 pb-48 animate-in fade-in slide-in-from-bottom-4 duration-500">
         <div className="flex justify-between items-end px-2">
@@ -704,60 +806,77 @@ const App: React.FC = () => {
         {settings.history.length === 0 ? (
           <div className="bg-white rounded-[48px] p-24 text-center border border-slate-100 shadow-sm">
             <HistoryIcon className="w-16 h-16 text-slate-100 mx-auto mb-8" />
-            <p className="text-[11px] font-black text-slate-300 uppercase tracking-[0.2em]">No logs yet</p>
+            <p className="text-[11px] font-black text-slate-300 uppercase tracking-[0.2em]">아직 기록이 없습니다</p>
           </div>
         ) : (
-          <div className="space-y-4">
-            {settings.history.map(entry => (
-              <div key={entry.id} className="bg-white rounded-[32px] p-6 border border-slate-100 shadow-sm">
-                <div className="flex justify-between items-start mb-5">
-                  <div>
-                    <div className="flex items-center gap-2 mb-2">
-                      <span className="text-[9px] font-black text-blue-600 bg-blue-50 px-2.5 py-1 rounded-lg uppercase tracking-wider border border-blue-100">C{entry.cycle} · W{entry.week}</span>
-                      <span className="text-[9px] font-black text-slate-400 bg-slate-50 px-2.5 py-1 rounded-lg uppercase tracking-wider">{entry.date}</span>
-                    </div>
-                    <h4 className="text-xl font-black text-slate-800 tracking-tight">{LIFT_LABELS[entry.lift]}</h4>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button 
-                      onClick={() => handleEditHistory(entry)}
-                      className="p-2 text-slate-300 hover:text-blue-500 hover:bg-blue-50 rounded-xl transition-all active:scale-90"
-                      aria-label="편집"
-                    >
-                      <Pencil className="w-4 h-4" />
-                    </button>
-                    <button 
-                      onClick={() => deleteHistoryItem(entry.id)}
-                      className="p-2 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-xl transition-all active:scale-90"
-                      aria-label="삭제"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
-                
-                <div className="space-y-5">
-                  <div className="grid grid-cols-3 gap-2.5">
-                    {entry.mainSets.map((s, idx) => (
-                      <div key={idx} className={`p-3 rounded-2xl text-center flex flex-col gap-1.5 border transition-all ${s.completed ? 'bg-blue-50/50 border-blue-100' : 'bg-slate-50/50 border-slate-50 opacity-30'}`}>
-                        <span className="text-xs font-black text-slate-900 tracking-tighter">{s.weight}kg</span>
-                        <span className="text-[9px] font-black text-blue-500 uppercase">{s.reps}회</span>
-                      </div>
-                    ))}
-                  </div>
-                  {entry.accessories.length > 0 && (
-                    <div className="pt-5 border-t border-slate-50 flex flex-wrap gap-2.5">
-                      {entry.accessories.map((acc, idx) => (
-                        <div key={idx} className="bg-slate-900 px-4 py-2.5 rounded-2xl border border-white/5 shadow-sm">
-                          <p className="text-[10px] font-black text-white/90 mb-0.5">{acc.name}</p>
-                          <p className="text-[9px] font-black text-blue-400 uppercase">{acc.weight}kg · {acc.sets}S · {acc.reps}</p>
-                        </div>
-                      ))}
+          <div className="space-y-3">
+            {cycles.map(cycle => {
+              const weekMap = historyByCycleWeek.get(cycle)!;
+              const weeks = Array.from(weekMap.keys()).sort((a, b) => a - b);
+              const isCycleOpen = openHistoryCycles.has(cycle);
+              return (
+                <div key={cycle} className="bg-white rounded-[32px] border border-slate-100 shadow-sm overflow-hidden">
+                  <button
+                    onClick={() => toggleCycle(cycle)}
+                    className="w-full flex items-center justify-between p-5 text-left"
+                  >
+                    <span className="text-lg font-black text-slate-800">C{cycle}</span>
+                    {isCycleOpen ? <ChevronUp className="w-5 h-5 text-slate-400" /> : <ChevronDown className="w-5 h-5 text-slate-400" />}
+                  </button>
+                  {isCycleOpen && (
+                    <div className="border-t border-slate-50 px-3 pb-3 space-y-2">
+                      {weeks.map(week => {
+                        const entries = weekMap.get(week)!;
+                        const summary = getWeekSummary(entries);
+                        const weekKey = `${cycle}-${week}`;
+                        const isWeekOpen = openHistoryWeeks.has(weekKey);
+                        const weekLabel = week === 7 ? 'Deload' : `W${week}`;
+                        return (
+                          <div key={weekKey} className="rounded-2xl border border-slate-100 overflow-hidden">
+                            <button
+                              onClick={() => toggleWeek(cycle, week)}
+                              className="w-full flex items-center justify-between p-4 bg-slate-50/50 text-left"
+                            >
+                              <span className="font-black text-slate-800">{weekLabel}</span>
+                              <div className="flex items-center gap-4 text-[11px] font-black text-slate-500">
+                                <span>완료 {summary.completionPct}%</span>
+                                <span>볼륨 {Math.round(summary.totalVolumeKg)}kg</span>
+                                <span>PR {summary.prCount}개</span>
+                              </div>
+                              {isWeekOpen ? <ChevronUp className="w-4 h-4 text-slate-400 shrink-0" /> : <ChevronDown className="w-4 h-4 text-slate-400 shrink-0" />}
+                            </button>
+                            {isWeekOpen && (
+                              <div className="p-4 pt-0 space-y-4">
+                                {mainLiftsOrder.map(lift => {
+                                  const liftEntries = entries.filter(e => e.lift === lift);
+                                  if (liftEntries.length === 0) return null;
+                                  return (
+                                    <div key={lift}>
+                                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-2">{LIFT_LABELS[lift]}</p>
+                                      <div className="space-y-3">
+                                        {liftEntries.map(entry => renderHistoryCard(entry))}
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                                {entries.filter(e => e.lift === LiftType.WEAKNESS).length > 0 && (
+                                  <div>
+                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-2">{LIFT_LABELS[LiftType.WEAKNESS]}</p>
+                                    <div className="space-y-3">
+                                      {entries.filter(e => e.lift === LiftType.WEAKNESS).map(entry => renderHistoryCard(entry))}
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
 
@@ -908,6 +1027,123 @@ const App: React.FC = () => {
             </div>
           </div>
         )}
+      </div>
+    );
+  };
+
+  const renderAnalysis = () => {
+    const analysisLifts: Exclude<LiftType, LiftType.WEAKNESS>[] = [
+      LiftType.SQUAT,
+      LiftType.BENCH,
+      LiftType.DEADLIFT,
+      LiftType.OHP,
+    ];
+
+    const E1RMChart: React.FC<{
+      points: { weekLabel: string; e1RM: number; tooltip: string }[];
+      liftLabel: string;
+    }> = ({ points, liftLabel }) => {
+      if (points.length < 2) {
+        return (
+          <p className="text-sm text-slate-500 py-6 text-center">기록이 쌓이면 추세를 보여드릴게요.</p>
+        );
+      }
+      const padding = { top: 16, right: 8, bottom: 28, left: 36 };
+      const w = 280;
+      const h = 160;
+      const xMin = 0;
+      const xMax = w - padding.left - padding.right;
+      const yMin = 0;
+      const yMax = h - padding.top - padding.bottom;
+      const minE1RM = Math.min(...points.map(p => p.e1RM));
+      const maxE1RM = Math.max(...points.map(p => p.e1RM));
+      const range = maxE1RM - minE1RM || 1;
+      const yScale = (v: number) => padding.top + yMax - ((v - minE1RM) / range) * yMax;
+      const xScale = (i: number) => padding.left + (i / (points.length - 1)) * xMax;
+      const pathD = points
+        .map((p, i) => `${i === 0 ? 'M' : 'L'} ${xScale(i)} ${yScale(p.e1RM)}`)
+        .join(' ');
+      return (
+        <div className="mt-4">
+          <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">예상 1RM (e1RM)</p>
+          <p className="text-[10px] text-slate-400 mb-3">세트 기록을 기반으로 계산된 추정값입니다.</p>
+          <svg width="100%" viewBox={`0 0 ${w} ${h}`} className="overflow-visible">
+            <polyline
+              fill="none"
+              stroke="rgb(59, 130, 246)"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              points={points.map((p, i) => `${xScale(i)},${yScale(p.e1RM)}`).join(' ')}
+            />
+            {points.map((p, i) => (
+              <circle
+                key={i}
+                cx={xScale(i)}
+                cy={yScale(p.e1RM)}
+                r="4"
+                fill="rgb(59, 130, 246)"
+                className="cursor-pointer"
+              >
+                <title>{p.tooltip}</title>
+              </circle>
+            ))}
+            {points.map((p, i) => (
+              <text
+                key={`l-${i}`}
+                x={xScale(i)}
+                y={h - 6}
+                textAnchor="middle"
+                className="text-[9px] fill-slate-400 font-bold"
+              >
+                {p.weekLabel}
+              </text>
+            ))}
+          </svg>
+        </div>
+      );
+    };
+
+    return (
+      <div className="space-y-6 pb-48 animate-in fade-in slide-in-from-bottom-4 duration-500">
+        <h2 className="text-3xl font-black text-slate-900 px-2 flex items-center gap-2 tracking-tight">
+          <TrendingUp className="w-7 h-7 text-blue-600" />
+          분석
+        </h2>
+
+        <div className="space-y-3">
+          {analysisLifts.map(lift => {
+            const points = weeklyE1RMPerLift[lift];
+            const summary = getLiftE1RMSummary(points);
+            const isOpen = openAnalysisLift === lift;
+            return (
+              <div key={lift} className="bg-white rounded-[32px] border border-slate-100 shadow-sm overflow-hidden">
+                <button
+                  onClick={() => setOpenAnalysisLift(isOpen ? null : lift)}
+                  className="w-full flex flex-wrap items-center justify-between gap-3 p-5 text-left"
+                >
+                  <span className="font-black text-slate-800">{LIFT_LABELS[lift]}</span>
+                  <div className="flex items-center gap-4 text-[11px] font-black text-slate-500">
+                    <span>e1RM {summary.latest > 0 ? `${summary.latest}kg` : '—'}</span>
+                    {summary.change4w != null && (
+                      <span>{summary.change4w >= 0 ? '+' : ''}{summary.change4w}kg (4주)</span>
+                    )}
+                    <span>최고 {summary.max > 0 ? `${summary.max}kg` : '—'}</span>
+                  </div>
+                  {isOpen ? <ChevronUp className="w-5 h-5 text-slate-400 shrink-0" /> : <ChevronDown className="w-5 h-5 text-slate-400 shrink-0" />}
+                </button>
+                {isOpen && (
+                  <div className="px-5 pb-5 border-t border-slate-50 pt-4">
+                    <E1RMChart points={points} liftLabel={LIFT_LABELS[lift]} />
+                    {summary.change4w != null && Math.abs(summary.change4w) < 2.5 && points.length >= 2 && (
+                      <p className="text-[10px] text-slate-400 mt-3">정체 구간으로 보일 수 있습니다.</p>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
       </div>
     );
   };
@@ -1111,6 +1347,7 @@ const App: React.FC = () => {
       <main className="flex-1 px-5 pt-8">
         {activeTab === 'workout' && renderWorkout()}
         {activeTab === 'history' && renderHistory()}
+        {activeTab === 'analysis' && renderAnalysis()}
         {activeTab === 'settings' && renderSettings()}
         {activeTab === 'guide' && renderGuide()}
       </main>
@@ -1123,7 +1360,7 @@ const App: React.FC = () => {
             className={`flex-1 flex flex-col items-center gap-2 py-3.5 transition-all rounded-[32px] ${activeTab === 'workout' ? 'bg-white/10 text-white scale-[1.05]' : 'text-slate-500 opacity-60'}`}
           >
             <Calendar className={`w-5 h-5 ${activeTab === 'workout' ? 'text-blue-500' : ''}`} />
-            <span className="text-[9px] font-black uppercase tracking-widest">Workout</span>
+            <span className="text-[9px] font-black uppercase tracking-widest">운동</span>
           </button>
           
           <button 
@@ -1131,7 +1368,15 @@ const App: React.FC = () => {
             className={`flex-1 flex flex-col items-center gap-2 py-3.5 transition-all rounded-[32px] ${activeTab === 'history' ? 'bg-white/10 text-white scale-[1.05]' : 'text-slate-500 opacity-60'}`}
           >
             <HistoryIcon className={`w-5 h-5 ${activeTab === 'history' ? 'text-blue-500' : ''}`} />
-            <span className="text-[9px] font-black uppercase tracking-widest">History</span>
+            <span className="text-[9px] font-black uppercase tracking-widest">기록</span>
+          </button>
+          
+          <button 
+            onClick={() => handleTabChange('analysis')} 
+            className={`flex-1 flex flex-col items-center gap-2 py-3.5 transition-all rounded-[32px] ${activeTab === 'analysis' ? 'bg-white/10 text-white scale-[1.05]' : 'text-slate-500 opacity-60'}`}
+          >
+            <TrendingUp className={`w-5 h-5 ${activeTab === 'analysis' ? 'text-blue-500' : ''}`} />
+            <span className="text-[9px] font-black uppercase tracking-widest">분석</span>
           </button>
           
           <button 
@@ -1139,7 +1384,7 @@ const App: React.FC = () => {
             className={`flex-1 flex flex-col items-center gap-2 py-3.5 transition-all rounded-[32px] ${activeTab === 'settings' ? 'bg-white/10 text-white scale-[1.05]' : 'text-slate-500 opacity-60'}`}
           >
             <Settings className={`w-5 h-5 ${activeTab === 'settings' ? 'text-blue-500' : ''}`} />
-            <span className="text-[9px] font-black uppercase tracking-widest">Settings</span>
+            <span className="text-[9px] font-black uppercase tracking-widest">설정</span>
           </button>
           
           <button 
@@ -1147,7 +1392,7 @@ const App: React.FC = () => {
             className={`flex-1 flex flex-col items-center gap-2 py-3.5 transition-all rounded-[32px] ${activeTab === 'guide' ? 'bg-white/10 text-white scale-[1.05]' : 'text-slate-500 opacity-60'}`}
           >
             <Info className={`w-5 h-5 ${activeTab === 'guide' ? 'text-blue-500' : ''}`} />
-            <span className="text-[9px] font-black uppercase tracking-widest">Guide</span>
+            <span className="text-[9px] font-black uppercase tracking-widest">가이드</span>
           </button>
         </div>
       </nav>

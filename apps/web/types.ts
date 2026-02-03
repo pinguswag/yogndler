@@ -30,6 +30,8 @@ export interface AccessoryExercise {
 export interface WorkoutHistory {
   id: string;
   date: string;
+  /** Unix ms; optional for backward compatibility with existing records */
+  timestamp?: number;
   cycle: number;
   week: number;
   lift: LiftType;
