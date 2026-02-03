@@ -813,7 +813,7 @@ const App: React.FC = () => {
           <div className="space-y-3">
             {cycles.map(cycle => {
               const weekMap = historyByCycleWeek.get(cycle)!;
-              const weeks = Array.from(weekMap.keys()).sort((a, b) => a - b);
+              const weeks = Array.from(weekMap.keys()).sort((a, b) => b - a);
               const isCycleOpen = openHistoryCycles.has(cycle);
               return (
                 <div key={cycle} className="bg-white rounded-[32px] border border-slate-100 shadow-sm overflow-hidden">
@@ -1121,15 +1121,15 @@ const App: React.FC = () => {
               <div key={lift} className="bg-white rounded-[32px] border border-slate-100 shadow-sm overflow-hidden">
                 <button
                   onClick={() => setOpenAnalysisLift(isOpen ? null : lift)}
-                  className="w-full flex flex-wrap items-center justify-between gap-3 p-5 text-left"
+                  className="w-full flex flex-nowrap items-center justify-between gap-2 p-5 text-left"
                 >
-                  <span className="font-black text-slate-800">{LIFT_LABELS[lift]}</span>
-                  <div className="flex items-center gap-4 text-[11px] font-black text-slate-500">
-                    <span>e1RM {summary.latest > 0 ? `${summary.latest}kg` : '—'}</span>
+                  <span className="font-black text-slate-800 truncate min-w-0">{LIFT_LABELS[lift]}</span>
+                  <div className="flex flex-nowrap items-center gap-3 text-[11px] font-black text-slate-500 shrink-0">
+                    <span className="whitespace-nowrap">e1RM {summary.latest > 0 ? `${summary.latest}kg` : '—'}</span>
                     {summary.change4w != null && (
-                      <span>{summary.change4w >= 0 ? '+' : ''}{summary.change4w}kg (4주)</span>
+                      <span className="whitespace-nowrap">{summary.change4w >= 0 ? '+' : ''}{summary.change4w}kg (4주)</span>
                     )}
-                    <span>최고 {summary.max > 0 ? `${summary.max}kg` : '—'}</span>
+                    <span className="whitespace-nowrap">최고 {summary.max > 0 ? `${summary.max}kg` : '—'}</span>
                   </div>
                   {isOpen ? <ChevronUp className="w-5 h-5 text-slate-400 shrink-0" /> : <ChevronDown className="w-5 h-5 text-slate-400 shrink-0" />}
                 </button>
