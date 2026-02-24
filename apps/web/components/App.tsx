@@ -296,7 +296,9 @@ const App: React.FC = () => {
     if (window.confirm('새 사이클을 시작하시겠습니까?\n모든 종목의 무게가 자동으로 증량됩니다.')) {
       setSettings(prev => ({
         ...prev,
-        currentCycle: prev.currentCycle + 1
+        currentCycle: prev.currentCycle + 1,
+        completedSets: {},
+        prRecords: {},
       }));
       handleWeekChange(1);
       window.scrollTo({ top: 0, behavior: 'smooth' });
