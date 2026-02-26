@@ -719,7 +719,7 @@ const App: React.FC = () => {
   };
 
   const renderHistory = () => {
-    const cycles = Array.from(historyByCycleWeek.keys()).sort((a, b) => a - b);
+    const cycles = Array.from(historyByCycleWeek.keys()).sort((a, b) => b - a);
 
     const toggleCycle = (c: number) => {
       setOpenHistoryCycles(prev => {
