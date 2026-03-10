@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { 
   Settings, 
   Dumbbell, 
@@ -169,6 +169,18 @@ const App: React.FC = () => {
       [LiftType.WEAKNESS]: 0, // 약점 보완은 TM 없음
     };
   }, [settings?.oneRM, settings?.tmPercentage, settings?.currentCycle, activeWeek]);
+
+  // Register service worker for PWA (production only)
+  useEffect(() => {
+    if (process.env.NODE_ENV !== 'production') return;
+    if (typeof window === 'undefined' || !('serviceWorker' in navigator)) return;
+
+    navigator.serviceWorker
+      .register('/sw.js')
+      .catch(() => {
+        // ignore registration errors
+      });
+  }, []);
 
   const historyByCycleWeek = useMemo(() => {
     const history = settings?.history ?? [];
