@@ -172,18 +172,6 @@ const App: React.FC = () => {
     };
   }, [settings?.oneRM, settings?.tmPercentage, settings?.currentCycle, activeWeek]);
 
-  // Register service worker for PWA (production only)
-  useEffect(() => {
-    if (process.env.NODE_ENV !== 'production') return;
-    if (typeof window === 'undefined' || !('serviceWorker' in navigator)) return;
-
-    navigator.serviceWorker
-      .register('/sw.js')
-      .catch(() => {
-        // ignore registration errors
-      });
-  }, []);
-
   const historyByCycleWeek = useMemo(() => {
     const history = settings?.history ?? [];
     const map = new Map<number, Map<number, WorkoutHistory[]>>();

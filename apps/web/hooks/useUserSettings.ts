@@ -166,13 +166,26 @@ export function useUserSettings() {
       }
     };
 
+    // iOS Safari / 모바일 PWA: bfcache 복원 시 메모리상 구버전 UI가 남는 문제 방지
+    const handlePageShow = async (event: PageTransitionEvent) => {
+      if (!event.persisted) return;
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (user?.id) {
+        await loadSettings(user.id, { force: true });
+      }
+    };
+
     window.addEventListener('focus', handleFocus);
     document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('pageshow', handlePageShow);
 
     return () => {
       subscription.unsubscribe();
       window.removeEventListener('focus', handleFocus);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('pageshow', handlePageShow);
     };
   }, [loadSettings]);
 
