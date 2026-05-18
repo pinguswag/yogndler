@@ -49,7 +49,7 @@ import { useUserSettings } from '@/hooks/useUserSettings';
 import { supabase } from '@/lib/supabase/client';
 
 const App: React.FC = () => {
-  const { settings, setSettings, loading } = useUserSettings();
+  const { settings, setSettings, resetProgramProgress, loading } = useUserSettings();
   
   // localStorage에서 마지막 상태 복원
   const [activeTab, setActiveTab] = useState<'workout' | 'history' | 'settings' | 'guide' | 'analysis'>(() => {
@@ -311,10 +311,23 @@ const App: React.FC = () => {
         currentCycle: prev.currentCycle + 1,
         completedSets: {},
         prRecords: {},
-      }));
+      }), { immediate: true });
       handleWeekChange(1);
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
+  };
+
+  const handleResetProgram = async () => {
+    if (!window.confirm('정말 전체 진행 상황을 초기화하시겠습니까?')) return;
+    const ok = await resetProgramProgress();
+    if (!ok) {
+      alert('초기화 저장에 실패했습니다. 네트워크를 확인한 뒤 다시 시도해 주세요.');
+      return;
+    }
+    handleWeekChange(1);
+    handleLiftChange(LiftType.SQUAT);
+    handleTabChange('workout');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const clearAllHistory = () => {
@@ -322,7 +335,7 @@ const App: React.FC = () => {
       setSettings(prev => ({
         ...prev,
         history: []
-      }));
+      }), { immediate: true });
     }
   };
 
@@ -1235,7 +1248,7 @@ const App: React.FC = () => {
              주의: 진행 중인 사이클과 체크 내역이 모두 리셋됩니다.<br/>기존 운동 히스토리는 유지됩니다.
            </p>
            <button 
-             onClick={() => { if(window.confirm('정말 전체 진행 상황을 초기화하시겠습니까?')) setSettings(prev => ({ ...prev, completedSets: {}, prRecords: {}, currentCycle: 1 })); }}
+             onClick={handleResetProgram}
              className="w-full py-5 bg-white text-rose-600 font-black text-[11px] uppercase rounded-2xl shadow-xl shadow-rose-100 border border-rose-100 active:scale-95 transition-all mb-4"
            >
              프로그램 리셋하기

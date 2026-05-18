@@ -5,11 +5,19 @@ import { UserSettings } from '@/types';
 import { supabase } from '@/lib/supabase/client';
 import { getInitialSettings } from '@/lib/initial-settings';
 
+export type SetSettingsOptions = {
+  /** true면 디바운스 없이 즉시 DB에 저장 (초기화·사이클 전환 등) */
+  immediate?: boolean;
+};
+
+const RELOAD_SKIP_MS = 2500;
+
 export function useUserSettings() {
   const [settings, setSettings] = useState<UserSettings | null>(null);
   const [loading, setLoading] = useState(true);
   const [userId, setUserId] = useState<string | null>(null);
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const justSavedAtRef = useRef<number>(0);
 
   const saveSettingsToDB = useCallback(async (uid: string, settingsToSave: UserSettings) => {
     try {
@@ -25,13 +33,24 @@ export function useUserSettings() {
 
       if (error) {
         console.error('Error saving settings:', error);
+        return false;
       }
+      justSavedAtRef.current = Date.now();
+      return true;
     } catch (error) {
       console.error('Error saving settings:', error);
+      return false;
     }
   }, []);
 
-  const loadSettings = useCallback(async (uid: string) => {
+  const shouldSkipReloadFromServer = useCallback(() => {
+    return Date.now() - justSavedAtRef.current < RELOAD_SKIP_MS;
+  }, []);
+
+  const loadSettings = useCallback(async (uid: string, force = false) => {
+    if (!force && shouldSkipReloadFromServer()) {
+      return;
+    }
     try {
       setLoading(true);
       const { data, error } = await supabase
@@ -40,13 +59,12 @@ export function useUserSettings() {
         .eq('user_id', uid)
         .single<{ settings_json: UserSettings }>();
 
-      if (error && error.code !== 'PGRST116') { // PGRST116 = no rows returned
+      if (error && error.code !== 'PGRST116') {
         console.error('Error loading settings:', error);
         setSettings(getInitialSettings());
       } else if (data) {
         setSettings(data.settings_json);
       } else {
-        // No settings found, create initial settings
         const initialSettings = getInitialSettings();
         await saveSettingsToDB(uid, initialSettings);
         setSettings(initialSettings);
@@ -57,30 +75,27 @@ export function useUserSettings() {
     } finally {
       setLoading(false);
     }
-  }, [saveSettingsToDB]);
+  }, [saveSettingsToDB, shouldSkipReloadFromServer]);
 
-  // Load user and settings
   useEffect(() => {
     const loadUserAndSettings = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       const currentUserId = user?.id || null;
       setUserId(currentUserId);
-      
+
       if (user) {
-        await loadSettings(user.id);
+        await loadSettings(user.id, true);
       } else {
         setLoading(false);
       }
     };
 
-    // 초기 로드
     loadUserAndSettings();
 
-    // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (session?.user) {
         setUserId(session.user.id);
-        await loadSettings(session.user.id);
+        await loadSettings(session.user.id, true);
       } else {
         setUserId(null);
         setSettings(null);
@@ -88,7 +103,6 @@ export function useUserSettings() {
       }
     });
 
-    // 페이지 포커스 시 데이터 다시 로드 (재접속 시 자동 로딩)
     const handleFocus = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (user?.id) {
@@ -96,7 +110,6 @@ export function useUserSettings() {
       }
     };
 
-    // 페이지 가시성 변경 시 확인
     const handleVisibilityChange = async () => {
       if (!document.hidden) {
         const { data: { user } } = await supabase.auth.getUser();
@@ -116,31 +129,56 @@ export function useUserSettings() {
     };
   }, [loadSettings]);
 
-  const updateSettings = useCallback((newSettings: UserSettings | ((prev: UserSettings) => UserSettings)) => {
+  const updateSettings = useCallback((
+    newSettings: UserSettings | ((prev: UserSettings) => UserSettings),
+    options?: SetSettingsOptions
+  ) => {
     setSettings((prev) => {
       if (!prev) return prev;
-      
-      const updated = typeof newSettings === 'function' 
-        ? newSettings(prev) 
+
+      const updated = typeof newSettings === 'function'
+        ? newSettings(prev)
         : newSettings;
 
-      // Clear existing debounce timer
       if (debounceTimerRef.current) {
         clearTimeout(debounceTimerRef.current);
+        debounceTimerRef.current = null;
       }
 
-      // Set new debounce timer
       if (userId) {
-        debounceTimerRef.current = setTimeout(() => {
-          saveSettingsToDB(userId, updated);
-        }, 500);
+        if (options?.immediate) {
+          void saveSettingsToDB(userId, updated);
+        } else {
+          debounceTimerRef.current = setTimeout(() => {
+            void saveSettingsToDB(userId, updated);
+          }, 500);
+        }
       }
 
       return updated;
     });
   }, [userId, saveSettingsToDB]);
 
-  // Cleanup debounce timer on unmount
+  /** 프로그램 진행(사이클·체크·PR)만 초기화하고 DB에 즉시 반영 */
+  const resetProgramProgress = useCallback(async (): Promise<boolean> => {
+    if (!settings || !userId) return false;
+
+    const updated: UserSettings = {
+      ...settings,
+      currentCycle: 1,
+      completedSets: {},
+      prRecords: {},
+    };
+
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = null;
+    }
+
+    setSettings(updated);
+    return saveSettingsToDB(userId, updated);
+  }, [settings, userId, saveSettingsToDB]);
+
   useEffect(() => {
     return () => {
       if (debounceTimerRef.current) {
@@ -152,6 +190,7 @@ export function useUserSettings() {
   return {
     settings,
     setSettings: updateSettings,
+    resetProgramProgress,
     loading,
     userId
   };
