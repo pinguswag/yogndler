@@ -131,6 +131,8 @@ const App: React.FC = () => {
   const [openHistoryWeeks, setOpenHistoryWeeks] = useState<Set<string>>(new Set());
   // Analysis tab: which lift section is expanded
   const [openAnalysisLift, setOpenAnalysisLift] = useState<Exclude<LiftType, LiftType.WEAKNESS> | null>(null);
+  // 운동 화면 강제 리마운트 (프로그램 리셋 후 체크 UI 초기화)
+  const [workoutViewKey, setWorkoutViewKey] = useState(0);
 
   // TM Calculation Logic based on user's specific progression rules
   const currentTMs = useMemo(() => {
@@ -318,15 +320,21 @@ const App: React.FC = () => {
   };
 
   const handleResetProgram = async () => {
-    if (!window.confirm('정말 전체 진행 상황을 초기화하시겠습니까?')) return;
+    if (!window.confirm('정말 전체 진행 상황을 초기화하시겠습니까?\n사이클 1·1주차부터 다시 시작하며, 기록·분석 데이터는 유지됩니다.')) return;
     const ok = await resetProgramProgress();
     if (!ok) {
       alert('초기화 저장에 실패했습니다. 네트워크를 확인한 뒤 다시 시도해 주세요.');
       return;
     }
-    handleWeekChange(1);
-    handleLiftChange(LiftType.SQUAT);
-    handleTabChange('workout');
+    setActiveWeek(1);
+    setActiveLift(LiftType.SQUAT);
+    setActiveTab('workout');
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('wendler_last_week', '1');
+      localStorage.setItem('wendler_last_lift', LiftType.SQUAT);
+      localStorage.setItem('wendler_last_tab', 'workout');
+    }
+    setWorkoutViewKey((k) => k + 1);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -453,7 +461,7 @@ const App: React.FC = () => {
       : settings.accessories.filter(acc => acc.targetLifts.includes(activeLift));
 
     return (
-      <div className="space-y-6 pb-48 animate-in fade-in slide-in-from-bottom-4 duration-500">
+      <div key={`workout-${workoutViewKey}-${settings.currentCycle}-${activeWeek}`} className="space-y-6 pb-48 animate-in fade-in slide-in-from-bottom-4 duration-500">
         {/* Header Section */}
         <div className="bg-slate-900 rounded-[32px] p-6 shadow-2xl shadow-slate-300 text-white">
           <div className="flex justify-between items-center mb-6">
